@@ -1,7 +1,8 @@
 #!/usr/bin/env bb
 
 (ns beneath-d-remnants
-  (:require [clojure.string :as str]))
+  (:require [babashka.cli :as cli]
+            [clojure.string :as str]))
 
 (defn normalize [s]
   (str/lower-case (str/trim s)))
@@ -10,7 +11,18 @@
   []
   (str/includes? (normalize (System/getProperty "os.name")) "windows"))
 
-(def target "MSI Afterburner")
+(def cli-spec
+  {:target {:desc "Name of the target app"}})
+
+(def opts
+  (cli/parse-opts *command-line-args* {:spec cli-spec}))
+
+(def target (:target opts))
+
+(when (str/blank? target)
+  (binding [*out* *err*]
+    (println "Missing required argument: --target"))
+  (System/exit 2))
 
 (when-not (windows?)
   (binding [*out* *err*]
