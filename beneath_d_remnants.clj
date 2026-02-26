@@ -14,7 +14,7 @@
 
 (when-not (windows?)
   (binding [*out* *err*]
-    (println "this scrpt is intended for windows"))
+    (println "This script is intended for Windows"))
   (System/exit 1))
 
-(println "Target:" (normalize target))
+(println "Target:" target)
