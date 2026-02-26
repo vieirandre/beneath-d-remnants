@@ -11,17 +11,24 @@
   []
   (str/includes? (normalize (System/getProperty "os.name")) "windows"))
 
+(defn parse-names [s]
+  (->> (str/split (or s "") #",")
+       (map str/trim)
+       (remove str/blank?)
+       vec))
+
 (def cli-spec
-  {:target {:desc "Name of the target app"}})
+  {:apps {:desc "Names of the target apps"
+          :coerce parse-names}})
 
 (def opts
   (cli/parse-opts *command-line-args* {:spec cli-spec}))
 
-(def target (:target opts))
+(def target-apps (:apps opts))
 
-(when (str/blank? target)
+(when (or (nil? target-apps) (empty? target-apps))
   (binding [*out* *err*]
-    (println "Missing required argument: --target"))
+    (println "Missing required argument: --apps \"name1,name2\""))
   (System/exit 2))
 
 (when-not (windows?)
@@ -29,4 +36,4 @@
     (println "This script is intended for Windows"))
   (System/exit 1))
 
-(println "Target:" target)
+(println "Target apps:" (str/join ", " target-apps))
