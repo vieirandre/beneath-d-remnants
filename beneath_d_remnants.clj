@@ -18,13 +18,16 @@
        vec))
 
 (def cli-spec
-  {:apps {:desc "Names of the target apps"
-          :coerce parse-names}})
+  {:apps   {:desc "Names of the target apps"
+            :coerce parse-names}
+   :delete {:desc "Delete matches (default is dry-run)"
+            :default false}})
 
 (def opts
   (cli/parse-opts *command-line-args* {:spec cli-spec}))
 
 (def target-apps (:apps opts))
+(def delete? (boolean (:delete opts)))
 
 (when (or (nil? target-apps) (empty? target-apps))
   (binding [*out* *err*]
@@ -36,4 +39,5 @@
     (println "This script is intended for Windows"))
   (System/exit 1))
 
+(println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Target apps:" (str/join ", " target-apps))
