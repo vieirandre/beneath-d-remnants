@@ -2,6 +2,7 @@
 
 (ns beneath-d-remnants
   (:require [babashka.cli :as cli]
+            [babashka.fs :as fs]
             [clojure.string :as str]))
 
 (defn normalize [s]
