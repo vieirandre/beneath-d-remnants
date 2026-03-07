@@ -40,5 +40,22 @@
     (println "This script is intended for Windows"))
   (System/exit 1))
 
+(defn envv [k] (System/getenv k))
+
+(defn candidate-roots []
+  (->> [(envv "ProgramFiles")
+        (envv "ProgramFiles(x86)")
+        (envv "ProgramData")
+        (envv "LOCALAPPDATA")
+        (envv "APPDATA")]
+       (remove nil?)
+       (map fs/file)
+       (filter fs/exists?)
+       distinct))
+
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Target apps:" (str/join ", " target-apps))
+
+(doseq [root (candidate-roots)]
+  (let [entries (try (fs/list-dir root) (catch Exception _ []))]
+    (println (str root) "->" (count entries) "entries")))
