@@ -79,7 +79,10 @@
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Target apps:" (str/join ", " target-apps))
 
-(doseq [{:keys [root matches]} (scan-top-level target-apps)]
-  (println "Matches under:" (str root))
-  (doseq [p matches]
-    (println " -" (str p))))
+(let [results (scan-top-level target-apps)]
+  (if (empty? results)
+    (println "No matches found")
+    (doseq [{:keys [root matches]} results]
+      (println "Matches under:" (str root))
+      (doseq [p matches]
+        (println " -" (str p))))))
