@@ -62,16 +62,24 @@
                   (str/includes? t (normalize app)))
                 apps)))))
 
+(defn scan-top-level
+  [apps]
+  (reduce
+   (fn [acc root]
+     (let [entries (try (fs/list-dir root) (catch Exception _ []))
+           matches (filter (fn [p]
+                             (matches-any-app? (fs/file-name p) apps))
+                           entries)]
+       (if (seq matches)
+         (conj acc {:root root :matches matches})
+         acc)))
+   []
+   (candidate-roots)))
+
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Target apps:" (str/join ", " target-apps))
 
-(doseq [root (candidate-roots)]
-  (let [entries (try (fs/list-dir root) (catch Exception _ []))
-        matches (filter (fn [p]
-                          (matches-any-app? (fs/file-name p) target-apps))
-                        entries)]
-    (when (seq matches)
-      (println "Matches under:" (str root))
-      (doseq [p matches]
-        (println " -" (str p)))
-      (println))))
+(doseq [{:keys [root matches]} (scan-top-level target-apps)]
+  (println "Matches under:" (str root))
+  (doseq [p matches]
+    (println " -" (str p))))
