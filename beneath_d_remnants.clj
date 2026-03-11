@@ -76,13 +76,15 @@
    []
    (candidate-roots)))
 
-(println "Mode:" (if delete? "DELETE" "DRY-RUN"))
-(println "Target apps:" (str/join ", " target-apps))
-
-(let [results (scan-top-level target-apps)]
+(defn print-results [results]
   (if (empty? results)
-    (println "No matches found")
+    (println "No top-level matches found")
     (doseq [{:keys [root matches]} results]
       (println "Matches under:" (str root))
       (doseq [p matches]
         (println " -" (str p))))))
+
+(println "Mode:" (if delete? "DELETE" "DRY-RUN"))
+(println "Target apps:" (str/join ", " target-apps))
+
+(print-results (scan-top-level target-apps))
