@@ -69,8 +69,7 @@
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
            matches (->> entries
                         (filter (fn [p] (matches-any-app? (fs/file-name p) apps)))
-                        (map (fn [p] {:path (str p)})))]
-
+                        (map (fn [p] {:path (str p) :kind (if (fs/directory? p) :dir :file)})))]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
@@ -82,8 +81,8 @@
     (println "No top-level matches found")
     (doseq [{:keys [root matches]} results]
       (println "Matches under:" (str root))
-      (doseq [{:keys [path]} matches]
-        (println " -" path)))))
+      (doseq [{:keys [path kind]} matches]
+        (println " -" (str "[" (name kind) "]") path)))))
 
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Target apps:" (str/join ", " target-apps))
