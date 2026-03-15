@@ -3,7 +3,8 @@
 (ns beneath-d-remnants
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.java.io :as io]))
 
 (defn normalize [s]
   (str/lower-case (str/trim s)))
@@ -19,8 +20,8 @@
        vec))
 
 (def cli-spec
-  {:names   {:desc "Names to match during cleanup"
-             :coerce parse-names}
+  {:names  {:desc "Names to match during cleanup"
+            :coerce parse-names}
    :delete {:desc "Delete matches (default is dry-run)"
             :default false}})
 
@@ -53,6 +54,16 @@
        (filter fs/exists?)
        distinct))
 
+(defn recursive-roots []
+  (->> [(some-> (envv "ProgramData") (str "\\Microsoft\\Windows\\Start Menu"))
+        (some-> (envv "APPDATA") (str "\\Microsoft\\Windows\\Start Menu"))
+        (envv "LOCALAPPDATA")
+        (envv "APPDATA")]
+       (remove nil?)
+       (map fs/file)
+       (filter fs/exists?)
+       distinct))
+
 (defn matches-any-name?
   [text names]
   (let [t (normalize text)]
@@ -69,16 +80,41 @@
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
            matches (->> entries
                         (filter (fn [p] (matches-any-name? (fs/file-name p) names)))
-                        (map (fn [p] {:path (str p) :kind (if (fs/directory? p) :dir :file)})))]
+                        (map (fn [p]
+                               {:path (str p)
+                                :kind (if (fs/directory? p) :dir :file)})))]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
    []
    (candidate-roots)))
 
-(defn print-results [results]
+(defn safe-file-seq
+  [root]
+  (try
+    (seq (file-seq (io/file (str root))))
+    (catch Exception _
+      nil)))
+
+(defn scan-recursive
+  [names]
+  (reduce
+   (fn [acc root]
+     (let [matches (->> (or (safe-file-seq root) [])
+                        (filter (fn [p] (matches-any-name? (.getName p) names)))
+                        (map (fn [p]
+                               {:path (str p)
+                                :kind (if (.isDirectory p) :dir :file)})))]
+       (if (seq matches)
+         (conj acc {:root root :matches matches})
+         acc)))
+   []
+   (recursive-roots)))
+
+(defn print-results [label results]
+  (println label)
   (if (empty? results)
-    (println "No top-level matches found")
+    (println "No matches found")
     (doseq [{:keys [root matches]} results]
       (println "Matches under:" (str root))
       (doseq [{:keys [path kind]} matches]
@@ -87,4 +123,5 @@
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
 (println "Names:" (str/join ", " names))
 
-(print-results (scan-top-level names))
+(print-results "Top-level scan:" (scan-top-level names))
+(print-results "Recursive scan:" (scan-recursive names))
