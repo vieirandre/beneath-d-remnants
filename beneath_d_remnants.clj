@@ -19,20 +19,20 @@
        vec))
 
 (def cli-spec
-  {:apps   {:desc "Names of the target apps"
-            :coerce parse-names}
+  {:names   {:desc "Names to match during cleanup"
+             :coerce parse-names}
    :delete {:desc "Delete matches (default is dry-run)"
             :default false}})
 
 (def opts
   (cli/parse-opts *command-line-args* {:spec cli-spec}))
 
-(def target-apps (:apps opts))
+(def names (:names opts))
 (def delete? (boolean (:delete opts)))
 
-(when (or (nil? target-apps) (empty? target-apps))
+(when (or (nil? names) (empty? names))
   (binding [*out* *err*]
-    (println "Missing required argument: --apps \"name1,name2\""))
+    (println "Missing required argument: --names \"name1,name2\""))
   (System/exit 2))
 
 (when-not (windows?)
@@ -53,22 +53,22 @@
        (filter fs/exists?)
        distinct))
 
-(defn matches-any-app?
-  [text apps]
+(defn matches-any-name?
+  [text names]
   (let [t (normalize text)]
     (boolean
      (and t
-          (some (fn [app]
-                  (str/includes? t (normalize app)))
-                apps)))))
+          (some (fn [name]
+                  (str/includes? t (normalize name)))
+                names)))))
 
 (defn scan-top-level
-  [apps]
+  [names]
   (reduce
    (fn [acc root]
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
            matches (->> entries
-                        (filter (fn [p] (matches-any-app? (fs/file-name p) apps)))
+                        (filter (fn [p] (matches-any-name? (fs/file-name p) names)))
                         (map (fn [p] {:path (str p) :kind (if (fs/directory? p) :dir :file)})))]
        (if (seq matches)
          (conj acc {:root root :matches matches})
@@ -85,6 +85,6 @@
         (println " -" (str "[" (name kind) "]") path)))))
 
 (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
-(println "Target apps:" (str/join ", " target-apps))
+(println "Names:" (str/join ", " names))
 
-(print-results (scan-top-level target-apps))
+(print-results (scan-top-level names))
