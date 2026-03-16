@@ -73,6 +73,11 @@
                   (str/includes? t (normalize name)))
                 names)))))
 
+(defn path->match
+  [path dir?]
+  {:path (str path)
+   :kind (if dir? :dir :file)})
+
 (defn unique-matches
   [matches]
   (->> matches
@@ -87,9 +92,7 @@
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
            matches (->> entries
                         (filter (fn [p] (matches-any-name? (fs/file-name p) names)))
-                        (map (fn [p]
-                               {:path (str p)
-                                :kind (if (fs/directory? p) :dir :file)}))
+                        (map (fn [p] (path->match p (fs/directory? p))))
                         unique-matches)]
        (if (seq matches)
          (conj acc {:root root :matches matches})
@@ -110,9 +113,7 @@
    (fn [acc root]
      (let [matches (->> (or (safe-file-seq root) [])
                         (filter (fn [p] (matches-any-name? (.getName p) names)))
-                        (map (fn [p]
-                               {:path (str p)
-                                :kind (if (.isDirectory p) :dir :file)}))
+                        (map (fn [p] (path->match p (.isDirectory p))))
                         unique-matches)]
        (if (seq matches)
          (conj acc {:root root :matches matches})
