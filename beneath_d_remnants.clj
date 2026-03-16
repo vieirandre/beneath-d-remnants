@@ -73,6 +73,13 @@
                   (str/includes? t (normalize name)))
                 names)))))
 
+(defn unique-matches
+  [matches]
+  (->> matches
+       distinct
+       (sort-by :path)
+       vec))
+
 (defn scan-top-level
   [names]
   (reduce
@@ -82,7 +89,8 @@
                         (filter (fn [p] (matches-any-name? (fs/file-name p) names)))
                         (map (fn [p]
                                {:path (str p)
-                                :kind (if (fs/directory? p) :dir :file)})))]
+                                :kind (if (fs/directory? p) :dir :file)}))
+                        unique-matches)]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
@@ -104,7 +112,8 @@
                         (filter (fn [p] (matches-any-name? (.getName p) names)))
                         (map (fn [p]
                                {:path (str p)
-                                :kind (if (.isDirectory p) :dir :file)})))]
+                                :kind (if (.isDirectory p) :dir :file)}))
+                        unique-matches)]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
