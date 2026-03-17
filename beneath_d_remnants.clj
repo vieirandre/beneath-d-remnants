@@ -85,15 +85,21 @@
        (sort-by :path)
        vec))
 
+(defn collect-matches
+  [paths names name-fn dir?-fn]
+  (->> paths
+       (filter (fn [path]
+                 (matches-any-name? (name-fn path) names)))
+       (map (fn [path]
+              (path->match path (dir?-fn path))))
+       unique-matches))
+
 (defn scan-top-level
   [names]
   (reduce
    (fn [acc root]
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
-           matches (->> entries
-                        (filter (fn [p] (matches-any-name? (fs/file-name p) names)))
-                        (map (fn [p] (path->match p (fs/directory? p))))
-                        unique-matches)]
+           matches (collect-matches entries names fs/file-name fs/directory?)]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
@@ -111,10 +117,8 @@
   [names]
   (reduce
    (fn [acc root]
-     (let [matches (->> (or (safe-file-seq root) [])
-                        (filter (fn [p] (matches-any-name? (.getName p) names)))
-                        (map (fn [p] (path->match p (.isDirectory p))))
-                        unique-matches)]
+     (let [paths (or (safe-file-seq root) [])
+           matches (collect-matches paths names #(.getName %) #(.isDirectory %))]
        (if (seq matches)
          (conj acc {:root root :matches matches})
          acc)))
