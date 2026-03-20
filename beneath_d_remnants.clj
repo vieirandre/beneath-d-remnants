@@ -160,6 +160,9 @@
       (binding [*out* *err*]
         (println "Failed to delete:" path "-" (.getMessage e))))))
 
+(println "Scanning for leftovers matching:" (str/join ", " names))
+(println)
+
 (let [top-level-results (scan-top-level names)
       recursive-results (scan-recursive names)
       all-results (concat top-level-results recursive-results)]
