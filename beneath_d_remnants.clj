@@ -94,14 +94,20 @@
               (path->match path (dir?-fn path))))
        unique-matches))
 
+(defn root-result
+  [root matches]
+  (when (seq matches)
+    {:root root
+     :matches matches}))
+
 (defn scan-top-level
   [names]
   (reduce
    (fn [acc root]
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
            matches (collect-matches entries names fs/file-name fs/directory?)]
-       (if (seq matches)
-         (conj acc {:root root :matches matches})
+       (if-let [result (root-result root matches)]
+         (conj acc result)
          acc)))
    []
    (candidate-roots)))
@@ -119,8 +125,8 @@
    (fn [acc root]
      (let [paths (or (safe-file-seq root) [])
            matches (collect-matches paths names #(.getName %) #(.isDirectory %))]
-       (if (seq matches)
-         (conj acc {:root root :matches matches})
+       (if-let [result (root-result root matches)]
+         (conj acc result)
          acc)))
    []
    (recursive-roots)))
