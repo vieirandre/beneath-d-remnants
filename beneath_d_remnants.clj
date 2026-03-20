@@ -140,8 +140,39 @@
       (doseq [{:keys [path kind]} matches]
         (println " -" (str "[" (name kind) "]") path)))))
 
-(println "Mode:" (if delete? "DELETE" "DRY-RUN"))
-(println "Names:" (str/join ", " names))
+(defn collect-delete-targets
+  [results]
+  (->> results
+       (mapcat :matches)
+       distinct
+       (sort-by (fn [{:keys [path]}] (count path)) >)
+       vec))
 
-(print-results "Top-level scan:" (scan-top-level names))
-(print-results "Recursive scan:" (scan-recursive names))
+(defn delete-match!
+  [{:keys [path kind]}]
+  (try
+    (when (fs/exists? path)
+      (if (= kind :dir)
+        (fs/delete-tree path)
+        (fs/delete path)))
+    (println "Deleted:" path)
+    (catch Exception e
+      (binding [*out* *err*]
+        (println "Failed to delete:" path "-" (.getMessage e))))))
+
+(let [top-level-results (scan-top-level names)
+      recursive-results (scan-recursive names)
+      all-results (concat top-level-results recursive-results)]
+  (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
+  (println "Names:" (str/join ", " names))
+
+  (print-results "Top-level scan:" top-level-results)
+  (print-results "Recursive scan:" recursive-results)
+
+  (when delete?
+    (let [targets (collect-delete-targets all-results)]
+      (println "Deleting filesystem matches...")
+      (if (empty? targets)
+        (println "No matches found")
+        (doseq [target targets]
+          (delete-match! target))))))
