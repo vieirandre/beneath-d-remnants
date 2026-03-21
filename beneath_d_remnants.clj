@@ -20,16 +20,13 @@
        vec))
 
 (def cli-spec
-  {:names  {:desc "Names to match during cleanup"
-            :coerce parse-names}
-   :delete {:desc "Delete matches (default is dry-run)"
-            :default false}})
+  {:names {:desc "Names to match during cleanup"
+           :coerce parse-names}})
 
 (def opts
   (cli/parse-opts *command-line-args* {:spec cli-spec}))
 
 (def names (:names opts))
-(def delete? (boolean (:delete opts)))
 
 (when (or (nil? names) (empty? names))
   (binding [*out* *err*]
@@ -148,6 +145,16 @@
        (sort-by (fn [{:keys [path]}] (count path)) >)
        vec))
 
+(defn confirm-delete?
+  [targets]
+  (println)
+  (println "The items above would be deleted")
+  (println "Total delete targets:" (count targets))
+  (print "Proceed with deletion? [y/N]: ")
+  (flush)
+  (let [answer (some-> (read-line) normalize)]
+    (contains? #{"y" "yes"} answer)))
+
 (defn delete-match!
   [{:keys [path kind]}]
   (try
@@ -156,26 +163,30 @@
         (fs/delete-tree path)
         (fs/delete path)))
     (println "Deleted:" path)
-    (catch Exception e
+    (catch Exception _
       (binding [*out* *err*]
-        (println "Failed to delete:" path "-" (.getMessage e))))))
+        (println "Failed to delete:" path)))))
 
 (println "Scanning for leftovers matching:" (str/join ", " names))
 (println)
 
 (let [top-level-results (scan-top-level names)
       recursive-results (scan-recursive names)
-      all-results (concat top-level-results recursive-results)]
-  (println "Mode:" (if delete? "DELETE" "DRY-RUN"))
+      all-results (concat top-level-results recursive-results)
+      targets (collect-delete-targets all-results)]
   (println "Names:" (str/join ", " names))
+  (println)
 
   (print-results "Top-level scan:" top-level-results)
+  (println)
   (print-results "Recursive scan:" recursive-results)
 
-  (when delete?
-    (let [targets (collect-delete-targets all-results)]
+  (if (empty? targets)
+    (do
+      (println)
+      (println "No matches found"))
+    (when (confirm-delete? targets)
+      (println)
       (println "Deleting filesystem matches...")
-      (if (empty? targets)
-        (println "No matches found")
-        (doseq [target targets]
-          (delete-match! target))))))
+      (doseq [target targets]
+        (delete-match! target)))))
