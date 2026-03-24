@@ -8,7 +8,7 @@
             [clojure.java.shell :as sh]))
 
 (defn normalize [s]
-  (str/lower-case (str/trim s)))
+  (some-> s str/trim str/lower-case))
 
 (defn windows?
   []
