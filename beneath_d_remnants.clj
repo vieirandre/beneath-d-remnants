@@ -4,7 +4,8 @@
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [clojure.string :as str]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.java.shell :as sh]))
 
 (defn normalize [s]
   (str/lower-case (str/trim s)))
@@ -71,9 +72,9 @@
                 names)))))
 
 (defn path->match
-  [path dir?]
+  [path kind]
   {:path (str path)
-   :kind (if dir? :dir :file)})
+   :kind kind})
 
 (defn unique-matches
   [matches]
@@ -83,12 +84,12 @@
        vec))
 
 (defn collect-matches
-  [paths names name-fn dir?-fn]
+  [paths names name-fn kind-fn]
   (->> paths
        (filter (fn [path]
                  (matches-any-name? (name-fn path) names)))
        (map (fn [path]
-              (path->match path (dir?-fn path))))
+              (path->match path (kind-fn path))))
        unique-matches))
 
 (defn root-result
@@ -102,7 +103,8 @@
   (reduce
    (fn [acc root]
      (let [entries (try (fs/list-dir root) (catch Exception _ []))
-           matches (collect-matches entries names fs/file-name fs/directory?)]
+           matches (collect-matches entries names fs/file-name
+                                    (fn [p] (if (fs/directory? p) :dir :file)))]
        (if-let [result (root-result root matches)]
          (conj acc result)
          acc)))
@@ -121,14 +123,66 @@
   (reduce
    (fn [acc root]
      (let [paths (or (safe-file-seq root) [])
-           matches (collect-matches paths names #(.getName %) #(.isDirectory %))]
+           matches (collect-matches paths names #(.getName %)
+                                    (fn [p] (if (.isDirectory p) :dir :file)))]
        (if-let [result (root-result root matches)]
          (conj acc result)
          acc)))
    []
    (recursive-roots)))
 
-(defn print-results [label results]
+(defn reg-query-recursive
+  [root]
+  (let [{:keys [exit out]} (sh/sh "reg" "query" root "/s")]
+    (if (zero? exit)
+      (str/split-lines out)
+      [])))
+
+(defn reg-query-values
+  [key]
+  (let [{:keys [exit out]} (sh/sh "reg" "query" key)]
+    (if (zero? exit)
+      (str/split-lines out)
+      [])))
+
+(defn parse-reg-value-line
+  [line]
+  (when-let [[_ name type value]
+             (re-matches #"\s+([^\s].*?)\s{2,}(REG_\S+)\s{2,}(.*)" line)]
+    {:name (str/trim name)
+     :type type
+     :value (str/trim value)}))
+
+(defn scan-uninstall-keys
+  [names]
+  (let [roots ["HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+               "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+               "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"]]
+    (reduce
+     (fn [acc root]
+       (let [keys (->> (reg-query-recursive root)
+                       (filter #(re-find #"^HKEY_" %))
+                       vec)
+             matches (->> keys
+                          (keep (fn [key]
+                                  (let [values (->> (reg-query-values key)
+                                                    (map parse-reg-value-line)
+                                                    (remove nil?))
+                                        display-name (some #(when (= "DisplayName" (:name %)) (:value %)) values)
+                                        publisher (some #(when (= "Publisher" (:name %)) (:value %)) values)]
+                                    (when (or (matches-any-name? display-name names)
+                                              (matches-any-name? publisher names))
+                                      {:path key
+                                       :kind :reg-key}))))
+                          unique-matches)]
+         (if-let [result (root-result root matches)]
+           (conj acc result)
+           acc)))
+     []
+     roots)))
+
+(defn print-results
+  [label results]
   (println label)
   (if (empty? results)
     (println "No matches found")
@@ -141,6 +195,8 @@
   [results]
   (->> results
        (mapcat :matches)
+       (filter (fn [{:keys [kind]}]
+                 (contains? #{:dir :file} kind)))
        distinct
        (sort-by (fn [{:keys [path]}] (count path)) >)
        vec))
@@ -148,7 +204,7 @@
 (defn confirm-delete?
   [targets]
   (println)
-  (println "The items above would be deleted")
+  (println "The filesystem items above would be deleted")
   (println "Total delete targets:" (count targets))
   (print "Proceed with deletion? [y/N]: ")
   (flush)
@@ -172,7 +228,8 @@
 
 (let [top-level-results (scan-top-level names)
       recursive-results (scan-recursive names)
-      all-results (concat top-level-results recursive-results)
+      uninstall-results (scan-uninstall-keys names)
+      all-results (concat top-level-results recursive-results uninstall-results)
       targets (collect-delete-targets all-results)]
   (println "Names:" (str/join ", " names))
   (println)
@@ -180,11 +237,13 @@
   (print-results "Top-level scan:" top-level-results)
   (println)
   (print-results "Recursive scan:" recursive-results)
+  (println)
+  (print-results "Uninstall registry scan:" uninstall-results)
 
   (if (empty? targets)
     (do
       (println)
-      (println "No matches found"))
+      (println "No filesystem matches found"))
     (when (confirm-delete? targets)
       (println)
       (println "Deleting filesystem matches...")
