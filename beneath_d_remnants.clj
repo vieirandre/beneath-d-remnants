@@ -181,6 +181,27 @@
      []
      roots)))
 
+(defn scan-software-keys
+  [names]
+  (let [roots ["HKCU\\Software"
+               "HKLM\\Software"
+               "HKLM\\Software\\WOW6432Node"]]
+    (reduce
+     (fn [acc root]
+       (let [matches (->> (reg-query-values root)
+                          (filter #(re-find #"^HKEY_" %))
+                          (keep (fn [key]
+                                  (let [child-name (last (str/split key #"\\+"))]
+                                    (when (matches-any-name? child-name names)
+                                      {:path key
+                                       :kind :reg-key}))))
+                          unique-matches)]
+         (if-let [result (root-result root matches)]
+           (conj acc result)
+           acc)))
+     []
+     roots)))
+
 (defn print-results
   [label results]
   (println label)
@@ -229,7 +250,11 @@
 (let [top-level-results (scan-top-level names)
       recursive-results (scan-recursive names)
       uninstall-results (scan-uninstall-keys names)
-      all-results (concat top-level-results recursive-results uninstall-results)
+      software-results (scan-software-keys names)
+      all-results (concat top-level-results
+                          recursive-results
+                          uninstall-results
+                          software-results)
       targets (collect-delete-targets all-results)]
   (println "Names:" (str/join ", " names))
   (println)
@@ -239,6 +264,8 @@
   (print-results "Recursive scan:" recursive-results)
   (println)
   (print-results "Uninstall registry scan:" uninstall-results)
+  (println)
+  (print-results "Software registry scan:" software-results)
 
   (if (empty? targets)
     (do
